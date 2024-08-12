@@ -1,11 +1,11 @@
 node_modules
 
 target
-src
+# src
 
 .env
 .snfoundry_cache
 .DS_Store
 
-Scarb.toml
-Scarb.lock
+# Scarb.toml
+# Scarb.lock

@@ -1,58 +1,45 @@
-import { Account, CallData, Contract, RpcProvider, stark } from "starknet";
+// Declare a contract.
+// launch with npx ts-node src/scripts/9.declareContract.ts
+// Coded with Starknet.js v5.16.0, Starknet-devnet-rs v0.1.0
+
+import { Account, json, RpcProvider, Contract } from "starknet";
+import fs from "fs";
 import * as dotenv from "dotenv";
-import { getCompiledCode } from "./utils";
 dotenv.config();
 
-async function main() {
-  const provider = new RpcProvider({
-    nodeUrl: process.env.RPC_ENDPOINT,
-  });
 
-  // initialize existing predeployed account 0
-  console.log("ACCOUNT_ADDRESS=", process.env.DEPLOYER_ADDRESS);
-  console.log("ACCOUNT_PRIVATE_KEY=", process.env.DEPLOYER_PRIVATE_KEY);
-  const privateKey0 = process.env.DEPLOYER_PRIVATE_KEY ?? "";
-  const accountAddress0: string = process.env.DEPLOYER_ADDRESS ?? "";
-  const account0 = new Account(provider, accountAddress0, privateKey0);
-  console.log("Account connected.\n");
+async function main(classHash: string) {
+    // const provider = new RpcProvider({ nodeUrl: "http://127.0.0.1:5050/rpc" }); // only for starknet-devnet-rs
+    // const provider = new RpcProvider({ nodeUrl: `https://starknet-sepolia.infura.io/v3/${process.env.STARKNET_API_KEY}` }); // only for starknet-devnet-rs
+    const provider = new RpcProvider({ nodeUrl: `https://starknet-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_STARKNET_API_KEY}` });
 
-  // Declare & deploy contract
-  let sierraCode, casmCode;
+    console.log("Provider connected");
 
-  try {
-    ({ sierraCode, casmCode } = await getCompiledCode("counter_Counter"));
-  } catch (error: any) {
-    console.log("Failed to read contract files");
-    process.exit(1);
-  }
+    // initialize existing predeployed account 0 of Devnet
+    const privateKey = process.env.PRIVATE_KEY ?? "";
+    const accountAddress: string = process.env.ACCOUNT_ADDRESS ?? "";
+    const account = new Account(provider, accountAddress, privateKey, '1');
+    console.log("Account connected\n");
 
-  const myCallData = new CallData(sierraCode.abi);
-  const constructor = myCallData.compile("constructor", {
-    counter: 100,
-    kill_switch:
-      "0x05f7151ea24624e12dde7e1307f9048073196644aa54d74a9c579a257214b542",
-    initial_owner: process.env.DEPLOYER_ADDRESS ?? "",
-  });
-  const deployResponse = await account0.declareAndDeploy({
-    contract: sierraCode,
-    casm: casmCode,
-    constructorCalldata: constructor,
-    salt: stark.randomAddress(),
-  });
+    // const deployResponse = await account.deployContract({ classHash: classHash });
+    const deployResponse = await account.deployContract({ classHash: classHash, constructorCalldata: [100, "0x05f7151ea24624e12dde7e1307f9048073196644aa54d74a9c579a257214b542", accountAddress] });
+    await provider.waitForTransaction(deployResponse.transaction_hash);
 
-  // Connect the new contract instance :
-  const myTestContract = new Contract(
-    sierraCode.abi,
-    deployResponse.deploy.contract_address,
-    provider
-  );
-  console.log(
-    `✅ Contract has been deploy with the address: ${myTestContract.address}`
-  );
+    // read abi of Test contract
+    const { abi: testAbi } = await provider.getClassByHash(classHash);
+    if (testAbi === undefined) {
+        throw new Error('no abi.');
+    }
+
+    // Connect the new contract instance:
+    const myTestContract = new Contract(testAbi, deployResponse.contract_address, provider);
+    console.log('✅ Test Contract connected at =', myTestContract.address);
 }
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+
+const classHash_counter_contract = "0x76c80722f35c979bcd5a8646a23dab5ba7dae6414ccad56019732dcf7cb8c9";
+main(classHash_counter_contract)
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });
